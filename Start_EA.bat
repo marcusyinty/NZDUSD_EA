@@ -4,7 +4,7 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 set "PYTHON_DIR=.python_env"
 set "REPO_URL=https://github.com/marcusyinty/NZDUSD_EA/archive/refs/heads/main.zip"
-set "PYTHON_URL=https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip"
+set "PYTHON_URL=https://www.python.org/ftp/python/3.12.3/python-3.12.3-embed-amd64.zip"
 
 echo ===================================================
 echo NZDUSD_EA Launcher ^& Auto-Updater
@@ -15,7 +15,7 @@ if not exist "%PYTHON_DIR%\python.exe" (
     echo [INFO] Portable Python not found. Setting up...
     mkdir "%PYTHON_DIR%" 2>nul
     
-    echo [INFO] Downloading Python 3.10.11 Embeddable...
+    echo [INFO] Downloading Python 3.12.3 Embeddable...
     powershell -Command "Invoke-WebRequest -Uri '%PYTHON_URL%' -OutFile 'python.zip'"
     
     echo [INFO] Extracting Python...
@@ -26,8 +26,8 @@ if not exist "%PYTHON_DIR%\python.exe" (
     powershell -Command "Invoke-WebRequest -Uri 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%PYTHON_DIR%\get-pip.py'"
     
     echo [INFO] Configuring Python for pip...
-    :: Uncomment "import site" in python310._pth
-    powershell -Command "(Get-Content '%PYTHON_DIR%\python310._pth') -replace '#import site', 'import site' | Set-Content '%PYTHON_DIR%\python310._pth'"
+    :: Uncomment "import site" in python312._pth
+    powershell -Command "(Get-Content '%PYTHON_DIR%\python312._pth') -replace '#import site', 'import site' | Set-Content '%PYTHON_DIR%\python312._pth'"
     
     echo [INFO] Installing pip...
     "%PYTHON_DIR%\python.exe" "%PYTHON_DIR%\get-pip.py"
