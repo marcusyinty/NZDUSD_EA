@@ -1,0 +1,28 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python_env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary and local files
+.update_tmp/
+python.zip
+main.zip
+*.log
+config.json
+
+# If you have specific data or cache files you want to ignore
+# .data/
+# .cache/
+
+*.xlsx
+*.html
