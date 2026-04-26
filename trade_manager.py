@@ -39,40 +39,46 @@ class TradeManager:
                 
             state = self.trade_state[ticket]
             
+            # Phase Logic: Time-Based (Seconds)
+            order_open_time = pos.time
             current_time_sec = int(time.time())
-            ticks_array = mt5.copy_ticks_range(pos.symbol, pos.time, current_time_sec, mt5.COPY_TICKS_ALL)
-            ticks = len(ticks_array) if ticks_array is not None else 0
+            elapsed_seconds = current_time_sec - order_open_time
             
-            min_interval = self.config.get('MIN_HOLD_INTERVAL', 5000)
-            max_interval = self.config.get('MAX_HOLD_INTERVAL', 60000)
-            grace_period = self.config.get('GRACE_PERIOD_TICKS', 5000)
-            max_hold_with_grace = max_interval + grace_period
+            # Use seconds-based thresholds
+            min_hold_sec = self.config.get('MIN_HOLD_SECONDS', 1800)      # 30 mins
+            max_hold_sec = self.config.get('MAX_HOLD_SECONDS', 21600)     # 6 hours
+            grace_period_sec = self.config.get('GRACE_PERIOD_SECONDS', 1800) # 30 mins
+            max_hold_with_grace = max_hold_sec + grace_period_sec
             
-            # Phase 1: The Noise Zone (< 5000 intervals) - Do nothing
-            if ticks < min_interval:
+            # Phase 1: The Noise Zone (< 30 mins) - Do nothing
+            if elapsed_seconds < min_hold_sec:
                 continue
                 
-            # Phase 2: The Breakout (5000 - 60000) - Adjust SL to -50% of original risk
-            if min_interval <= ticks < max_interval and state["phase"] == 1:
+            # Phase 2: The Breakout (30 mins - 6 hours) - Adjust SL to -50% of original risk
+            if min_hold_sec <= elapsed_seconds < max_hold_sec and state["phase"] == 1:
+                logging.info(f"Phase 2 reached for position {ticket} (Elapsed: {elapsed_seconds}s). Moving SL to half risk.")
                 self.adjust_sl_to_half_risk(pos, state)
                 state["phase"] = 2
                 
-            # Phase 3: The Decay Peak (>= 60000)
-            if ticks >= max_interval and state["phase"] == 2:
+            # Phase 3: The Decay Peak (>= 6 hours)
+            if elapsed_seconds >= max_hold_sec and state["phase"] == 2:
                 if pos.profit > 0:
-                    self.close_position(pos, "Time-Decay Hard Exit")
+                    logging.info(f"Phase 3: Alpha Peak reached for position {ticket}. Profit is positive. Closing.")
+                    self.close_position(pos, "Time-Decay Alpha Exit")
                     state["phase"] = 3
                 else:
                     state["phase"] = 2.5 # Grace Period
-                    msg = f"Position {ticket} underwater at Alpha Peak. Entering Grace Period."
+                    msg = f"Position {ticket} underwater at Alpha Peak (Elapsed: {elapsed_seconds}s). Entering Grace Period."
                     logging.info(msg)
                     if self.notifier:
                         self.notifier.send_message(f"⚠️ *Grace Period Activated*\n{msg}")
                     
             # Grace Period Exit
             if state["phase"] == 2.5:
-                if pos.profit > 0 or ticks >= max_hold_with_grace:
-                    self.close_position(pos, "Grace Period Hard Exit")
+                if pos.profit > 0 or elapsed_seconds >= max_hold_with_grace:
+                    reason = "Grace Period Profit Exit" if pos.profit > 0 else "Grace Period Hard Exit"
+                    logging.info(f"{reason} for position {ticket} (Elapsed: {elapsed_seconds}s).")
+                    self.close_position(pos, reason)
                     state["phase"] = 3
 
         # Cleanup closed trades

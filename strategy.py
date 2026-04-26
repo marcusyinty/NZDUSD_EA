@@ -33,11 +33,19 @@ class Strategy:
         
         # 1. Asian Session Breakout
         if asian_high is not None and asian_low is not None:
-            if close > asian_high and uptrend:
-                signal = "BUY"
-            elif close < asian_low and downtrend:
-                signal = "SELL"
-                
+            if close > asian_high:
+                if uptrend:
+                    signal = "BUY"
+                else:
+                    import logging
+                    logging.info(f"Asian Breakout (High) detected but filters failed: EMA 50={ema50:.5f}, RSI={rsi:.1f} (Need close > EMA and RSI > 50)")
+            elif close < asian_low:
+                if downtrend:
+                    signal = "SELL"
+                else:
+                    import logging
+                    logging.info(f"Asian Breakout (Low) detected but filters failed: EMA 50={ema50:.5f}, RSI={rsi:.1f} (Need close < EMA and RSI < 50)")
+                 
         # 2. 15-Minute Sweep (Previous candle's high/low broken)
         if signal is None:
             prev_high = df.iloc[-3]['high']
@@ -45,10 +53,18 @@ class Strategy:
             
             # Check if last closed candle swept the previous high/low
             # and current price confirms it
-            if last_closed['high'] > prev_high and uptrend:
-                signal = "BUY"
-            elif last_closed['low'] < prev_low and downtrend:
-                signal = "SELL"
+            if last_closed['high'] > prev_high:
+                if uptrend:
+                    signal = "BUY"
+                else:
+                    import logging
+                    logging.info(f"15m Sweep (High) detected but filters failed: EMA 50={ema50:.5f}, RSI={rsi:.1f} (Need close > EMA and RSI > 50)")
+            elif last_closed['low'] < prev_low:
+                if downtrend:
+                    signal = "SELL"
+                else:
+                    import logging
+                    logging.info(f"15m Sweep (Low) detected but filters failed: EMA 50={ema50:.5f}, RSI={rsi:.1f} (Need close < EMA and RSI < 50)")
                 
         return signal
 

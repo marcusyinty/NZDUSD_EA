@@ -11,7 +11,7 @@ import sys
 import os
 import shutil
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from logging.handlers import TimedRotatingFileHandler
 
 def load_config(path="config.json"):
     if not os.path.exists(path):
@@ -83,6 +83,75 @@ def execute_trade(signal, config, strategy, current_price, notifier=None):
             notifier.send_message(f"🚀 *NZD-Alpha Entry*\n{msg}\nSL: {sl:.5f} | TP: {tp:.5f}")
 
 
+def setup_logging():
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
+    
+    log_file = f"logs/NZD_Alpha_{datetime.now().strftime('%Y-%m-%d')}.log"
+    
+    # Configure logging to both console and file
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    # File handler (Daily rotation)
+    file_handler = TimedRotatingFileHandler(
+        filename=log_file,
+        when="midnight",
+        interval=1,
+        backupCount=30
+    )
+    file_handler.setFormatter(formatter)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    
+    # Reset root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.handlers = [file_handler, console_handler]
+
+def format_seconds(seconds):
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{int(h):02d}:{int(m):02d}:{int(s):02d}"
+
+def display_dashboard(config, trade_manager):
+    # Clear screen (Windows)
+    os.system('cls' if os.name == 'nt' else 'clear')
+    
+    print("="*60)
+    print(f" NZD-Alpha EA - Terminal Dashboard | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("="*60)
+    
+    account_info = mt5.account_info()
+    if account_info:
+        print(f" Account: {account_info.login} | Balance: {account_info.balance:.2f} | Equity: {account_info.equity:.2f}")
+    
+    positions = mt5.positions_get(symbol=config['SYMBOL'])
+    print("-" * 60)
+    print(f" Active Positions: {len(positions) if positions else 0}")
+    
+    if positions:
+        for pos in positions:
+            if pos.magic == config['MAGIC_NUMBER']:
+                elapsed = int(time.time()) - pos.time
+                max_hold = config.get('MAX_HOLD_SECONDS', 21600)
+                grace = config.get('GRACE_PERIOD_SECONDS', 1800)
+                exit_target_sec = max_hold + grace
+                
+                print(f" Ticket: {pos.ticket} | Type: {'BUY' if pos.type == mt5.ORDER_TYPE_BUY else 'SELL'} | Profit: {pos.profit:.2f}")
+                print(f" Time Held: {format_seconds(elapsed)} | Exit Target: {format_seconds(exit_target_sec)}")
+                
+                state = trade_manager.trade_state.get(pos.ticket, {})
+                phase = state.get("phase", "Unknown")
+                print(f" Current Phase: {phase}")
+    else:
+        print(" No active trades.")
+    
+    print("-" * 60)
+    print(" (Press Ctrl+C to stop)")
+
 def main():
     try:
         config = load_config()
@@ -90,6 +159,8 @@ def main():
         logging.error(f"Failed to load config: {e}")
         sys.exit(1)
         
+    setup_logging()
+    
     if not mt5.initialize():
         logging.error("mt5.initialize() failed")
         mt5.shutdown()
@@ -113,8 +184,8 @@ def main():
     
     start_balance = mt5.account_info().balance
     
-    # Simple rate limiting for M15 processing to avoid redundant calculations
-    last_processed_candle_time = None
+    # Simple rate limiting for dashboard updates
+    last_ui_update = 0
     
     try:
         while True:
@@ -161,8 +232,13 @@ def main():
                             current_price = tick.ask if signal == "BUY" else tick.bid
                             execute_trade(signal, config, strategy, current_price, notifier)
                     else:
-                        logging.debug(f"Spread {current_spread:.1f} > Max ({config.get('MAX_SPREAD_PIPS', 3.0)}). Blocking entry.")
+                        logging.info(f"Entry blocked: Spread {current_spread:.1f} > {config.get('MAX_SPREAD_PIPS', 3.0)}")
             
+            # Update Dashboard every 2 seconds
+            if time.time() - last_ui_update > 2:
+                display_dashboard(config, trade_manager)
+                last_ui_update = time.time()
+                
             time.sleep(1) # Sleep to prevent 100% CPU usage
             
     except KeyboardInterrupt:
